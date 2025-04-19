@@ -3,6 +3,7 @@ import sys
 import random
 import numpy as np
 import torch
+import torch.nn as nn
 import utils
 from pathlib import Path
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
@@ -58,7 +59,7 @@ def main():
 
     # init quantized model
     config = AutoConfig.from_pretrained(args.quant_model_path,trust_remote_code=True)
-    tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=False,legacy=False,trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=True,legacy=False,trust_remote_code=True)
     with init_empty_weights():
         model = AutoModelForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
     wrap_to_quant_model(model)
@@ -116,13 +117,14 @@ def main():
         def __call__(self, module, input, output):
             if isinstance(input, tuple):
                 input = input[0]
-            self.tensor_list.append(input.pow(2).mean(dim=-1) + 1e-5)
+            # self.tensor_list.append(input.pow(2).mean(dim=-1) + 1e-5)
+            self.tensor_list.append(input.detach().cpu())
             return output
     
     hooks = []
     handlers = []
     for name, module in model.named_modules():
-        if isinstance(module, QuantRMSNorm):
+        if isinstance(module, nn.SiLU):
             hook = NormHook()
             hooks.append(hook)
             handlers.append(module.register_forward_hook(hook))
@@ -142,7 +144,7 @@ def main():
     # acts = torch.cat(acts, dim=0).cpu()
     # print(acts.shape)
 
-    torch.save(acts, 'acts.pt')
+    torch.save(acts, 'silu_input_acts.pt')
 
     # import ipdb
     # ipdb.set_trace()

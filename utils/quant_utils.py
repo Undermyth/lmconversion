@@ -1035,7 +1035,7 @@ import pathlib
 import sys
 path = pathlib.Path(__file__).parent.parent
 sys.path.append(str(path))
-from spike.ops import spike_matmul, spike_matmul_mean
+from spike.ops import spike_matmul, spike_matmul_mean, spike_matmul_triton, spike_matmul_mean_triton
 import functools
 from einops import rearrange, repeat
 # [added]
@@ -1063,29 +1063,19 @@ def sdpa_wrapper(spike=False, T=None):
             key = key.repeat_interleave(query.size(-3)//key.size(-3), -3)
             value = value.repeat_interleave(query.size(-3)//value.size(-3), -3)
 
-        # print(rearrange(query, '(T B) ... -> T B ...', T=T).mean(0))
-        # print(query)
         if spike:
             assert T is not None
             B, H, _, _ = query.shape
             query = query.flatten(0, 1)
             key = key.flatten(0, 1).transpose(-2, -1)
-            attn_weight = spike_matmul_mean(query, key, T) * scale_factor
+            attn_weight = spike_matmul_mean_triton(query, key, T) * scale_factor
             attn_weight = rearrange(attn_weight, '(B H) ... -> B H ...', B=B, H=H)
         else:
             attn_weight = query @ key.transpose(-2, -1) * scale_factor
 
-        # q = rearrange(query, '(T B) ... -> T B ...', T=T).mean(0)
-        # k = rearrange(key, '(T B) ... -> T B ...', T=T).mean(0)
         attn_weight += attn_bias
-        # attn_weight = rearrange(attn_weight, '(T B) ... -> T B ...', T=T).mean(0)
-        # attn_weight = repeat(attn_weight, '... -> T ...', T=T).flatten(0, 1)
         attn_weight = self.softmax(attn_weight)
-        # print(rearrange(attn_weight, '(T B) ... -> T B ...', T=T).mean(0))
-        # print(attn_weight)
         attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
-        # attn_weight = rearrange(attn_weight, '(T B) ... -> T B ...', T=T).mean(0)
-        # attn_weight = repeat(attn_weight, '... -> T ...', T=T).flatten(0, 1)
 
         if hasattr(self, "a_quantizer") and hasattr(self, "a_bits") and self.a_bits < 16:
             attn_weight = self.a_quantizer(attn_weight)
@@ -1093,13 +1083,11 @@ def sdpa_wrapper(spike=False, T=None):
         if spike:
             value = value.flatten(0, 1)
             attn_weight = attn_weight.flatten(0, 1)
-            res = spike_matmul(attn_weight, value, T)
+            res = spike_matmul_triton(attn_weight, value, T)
             res = rearrange(res, '(B H) ... -> B H ...', B=B, H=H)
-            # print(rearrange(res, '(T B) ... -> T B ...', T=T).mean(0))
             return res
         else:
             res = attn_weight @ value
-            # print(res)
             return res
     return scaled_dot_product_attention
 

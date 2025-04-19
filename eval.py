@@ -3,6 +3,7 @@ import sys
 import random
 import numpy as np
 import torch
+import math
 import utils
 from pathlib import Path
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
@@ -14,8 +15,8 @@ from main import evaluate
 from utils.train_utils import load_json_as_namespace,create_logger
 from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_in_model
 
-from spike.ops import SpikeSoftmax, SpikeQuantizer
-from spike.spike_utils import firing_prehook, avg_after_hook, avg_after_tuple_hook, firing_after_hook, FiringModule
+from spike.ops import SpikeSoftmax, SpikeQuantizer, SpikeRMSNorm, SpikeLlamaMLP
+from spike.spike_utils import firing_pre_hook, avg_after_hook, avg_after_tuple_hook, firing_after_hook
 import functools
 
 torch.backends.cudnn.benchmark = True
@@ -30,14 +31,14 @@ def main():
     parser.add_argument("--output_dir", default="./log/test", type=str, help="direction of logging file")
     parser.add_argument("--real_quant", default=False, action="store_true",
                         help="use real quantization instead of fake quantization, can reduce memory footprint")
-    parser.add_argument("--ppl_seqlen", type=int, default=2048, help="lenth of the training sequence.")
+    parser.add_argument("--ppl_seqlen", type=int, default=1024, help="lenth of the training sequence.")
     parser.add_argument("--seed", type=int, default=2, help="Seed for sampling the calibration data.")
     parser.add_argument("--eval_ppl", action="store_true",help="evaluate perplexity on wikitext2 and c4 with 2048 context length")
     parser.add_argument("--eval_tasks", type=str,default="", help="exampe:piqa,arc_easy,arc_challenge,hellaswag,winogrande")
     parser.add_argument("--eval_batch_size", type=int, default=1)
     parser.add_argument("--max_memory", type=str, default="70GiB",help="The maximum memory of each GPU")
     parser.add_argument("--T", type=int, default=8, help="time step")
-    
+    parser.add_argument("--rmsnorm_range", type=float, default=10., help="rmsnorm range")
 
 
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
@@ -62,7 +63,7 @@ def main():
 
     # init quantized model
     config = AutoConfig.from_pretrained(args.quant_model_path,trust_remote_code=True)
-    tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=False,legacy=False,trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=True,legacy=False,trust_remote_code=True)
     with init_empty_weights():
         model = AutoModelForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
     wrap_to_quant_model(model)
@@ -79,6 +80,7 @@ def main():
                     config=model.config,
                     online_had=quant_config.qk_online_had)   
 
+    # 1. spiking matmul (attention)
     layers = model_utils.get_layers(model)
     for layer in layers:
         apply_naive_sdpa(layer.self_attn, spike=True, T=args.T)
@@ -120,26 +122,56 @@ def main():
     
     hooks = []
     layers = model_utils.get_layers(model)
-    prehook = functools.partial(firing_prehook, T=args.T)
+    prehook = functools.partial(firing_pre_hook, T=args.T)
     afterhook = functools.partial(firing_after_hook, T=args.T)
     avghook = functools.partial(avg_after_hook, T=args.T)
     avgtuplehook = functools.partial(avg_after_tuple_hook, T=args.T)
 
+    # 2. spiking softmax, q, k
     for layer in layers:
-
         q_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer
         k_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer
         
         layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer = SpikeQuantizer.from_pretrained(q_quantizer, args.T)
         layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer = SpikeQuantizer.from_pretrained(k_quantizer, args.T)
         layer.self_attn.softmax = SpikeSoftmax('spike/exp.pth', 'spike/inv.pth', args.T)
-        
-        # layer.input_layernorm.output_quantizer = SpikeQuantizer.from_pretrained(layer.input_layernorm.output_quantizer, args.T)
-        hooks.append(layer.input_layernorm.output_quantizer.register_forward_pre_hook(prehook))
-        hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
-        # hooks.append(layer.self_attn.softmax.register_forward_pre_hook(prehook))
-        # hooks.append(layer.self_attn.softmax.register_forward_hook(avghook))
     
+    # 3. spiking rmsnorm
+    acts = torch.load('rinv_input_acts.pth', weights_only=True)
+    maxs = np.array(list(map(lambda x: 1. / math.sqrt(x.min()), acts)))
+    mins = np.array(list(map(lambda x: 1. / math.sqrt(x.max()), acts)))
+    alphas = (maxs - mins) / args.rmsnorm_range
+    alpha_iter = iter(alphas)
+    for layer in layers:
+        alpha = next(alpha_iter)
+        layer.input_layernorm = SpikeRMSNorm(layer.input_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+        alpha = next(alpha_iter)
+        layer.post_attention_layernorm = SpikeRMSNorm(layer.post_attention_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+
+    # 4. spiking mlp
+    for layer in layers:
+        layer.mlp = SpikeLlamaMLP(layer.mlp, 'spike/silu.pth', args.T)
+
+    # for layer in layers:
+    #     hooks.append(layer.input_layernorm.output_quantizer.register_forward_pre_hook(prehook))
+    #     hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
+
+    for layer in layers:
+
+        hooks.append(layer.input_layernorm.register_forward_pre_hook(prehook))
+        hooks.append(layer.input_layernorm.register_forward_hook(avghook))
+
+        hooks.append(layer.input_layernorm.register_forward_hook(afterhook))
+        hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
+
+        hooks.append(layer.post_attention_layernorm.register_forward_pre_hook(prehook))
+        hooks.append(layer.post_attention_layernorm.register_forward_hook(avghook))
+
+        hooks.append(layer.post_attention_layernorm.register_forward_hook(afterhook))
+        hooks.append(layer.mlp.register_forward_hook(avghook))
+    
+    # print(model)
+    # exit(0)
     model.half()    # to make sure same evaluation results with main
     evaluate(model, tokenizer, prefixed_key_values,  args,logger)
 

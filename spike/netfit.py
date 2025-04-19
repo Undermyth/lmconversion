@@ -6,7 +6,8 @@ from functools import partial
 import sys
 import pathlib
 sys.path.append(str(pathlib.Path(__file__).parent))
-from relu_to_if import BurstNeuron, ReLUtoIFHook
+from neurons import BurstNeuron, multistep_neuron_update_triton
+from relu_to_if import ReLUtoIFHook
 from einops import rearrange
 import copy
 
@@ -26,11 +27,12 @@ class Approximator(nn.Module):
             self.clip.init_max_spike(T)
             x = self.fc1(x)
             x = rearrange(x, '(T B) ... -> T B ...', T=T)
-            output = []
-            for i in range(T):
-                output.append(self.clip(x[i], burst=False).detach())
-                torch.cuda.empty_cache()
-            output = torch.stack(output)
+            # output = []
+            # for i in range(T):
+            #     output.append(self.clip(x[i], burst=False).detach())
+            #     torch.cuda.empty_cache()
+            # output = torch.stack(output)
+            output = multistep_neuron_update_triton(x, self.clip.threshold)
             output = rearrange(output, 'T B ... -> (T B) ...')
             x = self.fc2(output)
         else:
@@ -251,7 +253,7 @@ def loss_func(func: Callable, x_secs: torch.Tensor, y_secs: torch.Tensor, T: int
     y_ends = y_secs[1:]
 
     if weights is not None and bin_size is not None:
-        balance = get_relative_weight(bin_size, weights, x_starts, x_ends).detach()
+        balance = get_relative_weight(bin_size, weights, x_secs).detach()
     else:
         balance = torch.ones(n_secs).detach()
 

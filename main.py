@@ -17,7 +17,7 @@ import utils.model_utils as model_utils
 import utils.rotation_utils as rotation_utils
 
 from spike.ops import SpikeSoftmax
-from spike.spike_utils import firing_prehook, avg_after_hook
+from spike.spike_utils import firing_pre_hook, avg_after_hook
 import functools
 
 from modeling_gpt_neox import GPTNeoXForCausalLM
@@ -39,8 +39,6 @@ def evaluate(model, tokenizer,prefixed_key_values, args, logger):
         for dataset in ppl_results:
             logger.info(f'{dataset} perplexity: {ppl_results[dataset]:.2f}')
             results_str += f"{ppl_results[dataset]:.2f} "
-        
-
 
     if args.eval_tasks != "":
         if prefixed_key_values is not None:
@@ -75,7 +73,6 @@ def evaluate(model, tokenizer,prefixed_key_values, args, logger):
         # remove wrapper
         if prefixed_key_values is not None:
             model = model.model
-
 
 
 def main():
