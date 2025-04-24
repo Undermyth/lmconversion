@@ -118,7 +118,7 @@ def main():
             if isinstance(input, tuple):
                 input = input[0]
             # self.tensor_list.append(input.pow(2).mean(dim=-1) + 1e-5)
-            self.tensor_list.append(input.detach().cpu())
+            self.tensor_list.append(torch.Tensor([input.min(), input.max()]))
             return output
     
     hooks = []

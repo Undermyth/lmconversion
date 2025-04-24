@@ -229,7 +229,7 @@ def test_ppl(args, model, tokenizer,prefixed_key_values=None, datasets=['wikitex
         nsamples = testenc.numel() // seqlen
         model.eval()
         nlls = []
-        nsamples = 16
+        nsamples = 64
         pbar = tqdm(range(nsamples))
         for i in pbar:
             batch = testenc[:, (i * seqlen) : ((i + 1) * seqlen)]

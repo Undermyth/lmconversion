@@ -1035,7 +1035,8 @@ import pathlib
 import sys
 path = pathlib.Path(__file__).parent.parent
 sys.path.append(str(path))
-from spike.ops import spike_matmul, spike_matmul_mean, spike_matmul_triton, spike_matmul_mean_triton
+from spike.ops import spike_matmul, spike_matmul_mean
+from spike.triton_ops import spike_matmul_triton, spike_matmul_mean_triton
 import functools
 from einops import rearrange, repeat
 # [added]
@@ -1068,7 +1069,7 @@ def sdpa_wrapper(spike=False, T=None):
             B, H, _, _ = query.shape
             query = query.flatten(0, 1)
             key = key.flatten(0, 1).transpose(-2, -1)
-            attn_weight = spike_matmul_mean_triton(query, key, T) * scale_factor
+            attn_weight = spike_matmul_mean(query, key, T) * scale_factor
             attn_weight = rearrange(attn_weight, '(B H) ... -> B H ...', B=B, H=H)
         else:
             attn_weight = query @ key.transpose(-2, -1) * scale_factor
@@ -1083,7 +1084,7 @@ def sdpa_wrapper(spike=False, T=None):
         if spike:
             value = value.flatten(0, 1)
             attn_weight = attn_weight.flatten(0, 1)
-            res = spike_matmul_triton(attn_weight, value, T)
+            res = spike_matmul(attn_weight, value, T)
             res = rearrange(res, '(B H) ... -> B H ...', B=B, H=H)
             return res
         else:

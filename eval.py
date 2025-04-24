@@ -3,6 +3,8 @@ import sys
 import random
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import math
 import utils
 from pathlib import Path
@@ -16,6 +18,7 @@ from utils.train_utils import load_json_as_namespace,create_logger
 from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_in_model
 
 from spike.ops import SpikeSoftmax, SpikeQuantizer, SpikeRMSNorm, SpikeLlamaMLP
+from spike.netfit import NonLinearOp
 from spike.spike_utils import firing_pre_hook, avg_after_hook, avg_after_tuple_hook, firing_after_hook
 import functools
 
@@ -150,11 +153,10 @@ def main():
 
     # 4. spiking mlp
     for layer in layers:
-        layer.mlp = SpikeLlamaMLP(layer.mlp, 'spike/silu.pth', args.T)
-
-    # for layer in layers:
-    #     hooks.append(layer.input_layernorm.output_quantizer.register_forward_pre_hook(prehook))
-    #     hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
+        # layer.mlp = SpikeLlamaMLP(layer.mlp, 'spike/silu.pth', args.T)
+        layer.mlp.act_fn = NonLinearOp.from_pretrained('spike/silu_new.pth')
+        layer.mlp.down_proj.input_quantizer = SpikeQuantizer.from_pretrained(layer.mlp.down_proj.input_quantizer, args.T)
+        # layer.mlp.act_fn = FakeSiLU()
 
     for layer in layers:
 
@@ -167,11 +169,9 @@ def main():
         hooks.append(layer.post_attention_layernorm.register_forward_pre_hook(prehook))
         hooks.append(layer.post_attention_layernorm.register_forward_hook(avghook))
 
-        hooks.append(layer.post_attention_layernorm.register_forward_hook(afterhook))
+        hooks.append(layer.mlp.register_forward_pre_hook(prehook))
         hooks.append(layer.mlp.register_forward_hook(avghook))
-    
-    # print(model)
-    # exit(0)
+
     model.half()    # to make sure same evaluation results with main
     evaluate(model, tokenizer, prefixed_key_values,  args,logger)
 
