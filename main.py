@@ -32,8 +32,8 @@ def evaluate(model, tokenizer,prefixed_key_values, args, logger):
     prefixed_key_values = model_utils.mv_kv_cache(prefixed_key_values, model)
     results_str=""
     if args.eval_ppl:
-        # datasets = ["wikitext2", "c4"]
-        datasets = ["wikitext2"]
+        datasets = ["wikitext2", "c4"]
+        # datasets = ["redpajama"]
         # ppl_results = test_ppl(args, model, tokenizer, prefixed_key_values, datasets)
         ppl_results = layerwise_test_ppl(args, model, tokenizer, prefixed_key_values, datasets)
         for dataset in ppl_results:
@@ -49,13 +49,14 @@ def evaluate(model, tokenizer,prefixed_key_values, args, logger):
         task_list = args.eval_tasks.split(',')
         model = HFLM(pretrained=model, batch_size=args.eval_batch_size)
         task_manager = lm_eval.tasks.TaskManager()
+        # model = torch.compile(model)
         results = lm_eval.simple_evaluate(
         model=model,
         tasks=task_list,
         num_fewshot=0,
         task_manager=task_manager,
         )
-        logger.info(make_table(results))
+        logger.info('\n' + make_table(results))
         total_acc = 0
         total_acc_with_norm = 0
         for task in ['winogrande','hellaswag','arc_challenge','arc_easy','piqa']:

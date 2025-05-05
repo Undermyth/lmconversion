@@ -8,7 +8,7 @@ import pathlib
 sys.path.append(str(pathlib.Path(__file__).parent))
 from neurons import BurstNeuron, multistep_neuron_update_triton
 from relu_to_if import ReLUtoIFHook
-from einops import rearrange
+from einops import rearrange, reduce
 import copy
 
 class Approximator(nn.Module):
@@ -27,12 +27,10 @@ class Approximator(nn.Module):
             self.clip.init_max_spike(T)
             x = self.fc1(x)
             x = rearrange(x, '(T B) ... -> T B ...', T=T)
-            # output = []
-            # for i in range(T):
-            #     output.append(self.clip(x[i], burst=False).detach())
-            #     torch.cuda.empty_cache()
-            # output = torch.stack(output)
             output = multistep_neuron_update_triton(x, self.clip.threshold)
+            fr_count = output.sum(dim=0) / self.clip.threshold
+            fr = reduce(fr_count, '... d -> d', 'mean') / T
+            print(fr.mean().item())
             output = rearrange(output, 'T B ... -> (T B) ...')
             x = self.fc2(output)
         else:
@@ -73,14 +71,15 @@ class NonLinearOp(nn.Module):
         into (T, B, d) inside the forward pass. 
         fitting loss, quantization loss and other possible losses are considered.
     '''
-    def __init__(self, approximator: Approximator, T: int, spike: bool = False):
+    def __init__(self, approximator: Approximator, T: int, tag: str = None, spike: bool = False):
         super().__init__()
         self.approximator = approximator
         self.spike = spike
+        self.tag = tag
         self.T = T
 
     @classmethod
-    def from_pretrained(cls, weight_path: str):
+    def from_pretrained(cls, weight_path: str, tag: str = None):
         checkpoint = torch.load(weight_path)
         n_neurons = checkpoint['n_neurons']
         T = checkpoint['T']
@@ -88,7 +87,7 @@ class NonLinearOp(nn.Module):
         state_dict['approximator.fc2.bias'] = state_dict['approximator.fc2.bias'].unsqueeze(0)
         approximator = Approximator(n_neurons)
         approximator.clip.threshold = checkpoint['threshold']
-        instance = cls(approximator, T, spike=True)
+        instance = cls(approximator, T, tag, spike=True)
         instance.eval()
         instance.load_state_dict(checkpoint['state_dict'])
         return instance
@@ -103,6 +102,7 @@ class NonLinearOp(nn.Module):
         torch.save(checkpoint, weight_path)
     
     def forward(self, x):
+        print(f'[debug] {self.tag}', end=' ')
         x = x.unsqueeze(-1)
         if self.spike:
             self.approximator.spike_on()

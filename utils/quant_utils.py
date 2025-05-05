@@ -1058,6 +1058,8 @@ def sdpa_wrapper(spike=False, T=None):
             if attn_mask.dtype == torch.bool:
                 attn_bias.masked_fill_(attn_mask.logical_not(), float("-inf"))
             else:
+                if attn_mask.shape[0] != query.shape[0]:
+                    attn_mask = repeat(attn_mask, '... -> T ...', T=T).flatten(0, 1)
                 attn_bias = attn_mask + attn_bias
 
         if enable_gqa:

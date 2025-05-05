@@ -120,11 +120,13 @@ def spike_matmul(X: torch.Tensor, Y: torch.Tensor, T: int):
     
     # Compute phi terms
     term1 = torch.einsum('t...ij,t...jk->t...ik', X_cumsum, Ys)
-    term2 = torch.einsum('t...ij,t...jk->t...ik', Xs, Y_cumsum)
-    Phi = torch.cumsum(term1 + term2, dim=0).float()
+    # term2 = torch.einsum('t...ij,t...jk->t...ik', Xs, Y_cumsum)
+    # Phi = torch.cumsum(term1 + term2, dim=0).float()
+    Phi = term1.float()
     
     # Compute t_psi_t terms
     times = torch.arange(1, T+1, device=X.device).view(T, *([1]*(Phi.dim()-1)))
+    times = (times + 1) / 2
     t_psi_t = Phi / times
     
     # Compute corrections - this part cannot be fully parallelized
@@ -203,8 +205,8 @@ def spike_elementwise_dot(X: torch.Tensor, Y: torch.Tensor, T: int):
 class SpikeSoftmax(nn.Module):
     def __init__(self, exp_weight_path: str, inv_weight_path: str, T: int):
         super().__init__()
-        self.expop = NonLinearOp.from_pretrained(exp_weight_path)
-        self.invop = NonLinearOp.from_pretrained(inv_weight_path)
+        self.expop = NonLinearOp.from_pretrained(exp_weight_path, tag='exp')
+        self.invop = NonLinearOp.from_pretrained(inv_weight_path, tag='inv')
         self.T = T
     
     def forward(self, x):
@@ -222,7 +224,7 @@ class SpikeRMSNorm(nn.Module):
         super().__init__()
         self.variance_epilon = variance_epsilon * alpha**2
         self.alpha = alpha
-        self.rsqrtop = NonLinearOp.from_pretrained(rsqrt_weight_path)
+        self.rsqrtop = NonLinearOp.from_pretrained(rsqrt_weight_path, tag='rinv')
         self.T = T
     
     def forward(self, x):

@@ -22,6 +22,8 @@ from spike.netfit import NonLinearOp
 from spike.spike_utils import firing_pre_hook, avg_after_hook, avg_after_tuple_hook, firing_after_hook
 import functools
 
+from modeling_llama import LlamaForCausalLM
+
 torch.backends.cudnn.benchmark = True
 
 
@@ -42,6 +44,7 @@ def main():
     parser.add_argument("--max_memory", type=str, default="70GiB",help="The maximum memory of each GPU")
     parser.add_argument("--T", type=int, default=8, help="time step")
     parser.add_argument("--rmsnorm_range", type=float, default=10., help="rmsnorm range")
+    parser.add_argument("--spike", action="store_true")
 
 
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
@@ -68,7 +71,14 @@ def main():
     config = AutoConfig.from_pretrained(args.quant_model_path,trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=True,legacy=False,trust_remote_code=True)
     with init_empty_weights():
-        model = AutoModelForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
+        if args.eval_tasks and args.spike:
+            model = LlamaForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
+            print(model)
+            layers = model_utils.get_layers(model)
+            for i in range(len(layers)):
+                layers[i].self_attn.past_key_value = model_utils.PrefixCache(prefixed_key_values, spike=args.spike, layer_index=i)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
     wrap_to_quant_model(model)
     # register on-line hadadamrd transformation
     if quant_config.down_online_had:
@@ -82,11 +92,6 @@ def main():
                     rope_function_name, 
                     config=model.config,
                     online_had=quant_config.qk_online_had)   
-
-    # 1. spiking matmul (attention)
-    layers = model_utils.get_layers(model)
-    for layer in layers:
-        apply_naive_sdpa(layer.self_attn, spike=True, T=args.T)
 
     # init weight quantizer
     if quant_config.wbits < 16:
@@ -114,66 +119,71 @@ def main():
         logger.info('init q quantizer')
         init_q_quantizer(quant_config, model,  minmax_init=False)
 
-    if quant_config.a_bits < 16:
-        logger.info('init a quantizer')
-        init_a_quantizer(quant_config, model,  minmax_init=False)
+    # 1. spiking matmul (attention)
+    layers = model_utils.get_layers(model)
+    for layer in layers:
+        apply_naive_sdpa(layer.self_attn, spike=args.spike, T=args.T)
 
     # model.tie_weights()
     device_map = infer_auto_device_map(model)
     print("Loading pre-computed quantized weights...")
     load_checkpoint_in_model(model,checkpoint=args.quant_model_path,device_map=device_map,dtype=torch.float16)
     
-    hooks = []
-    layers = model_utils.get_layers(model)
-    prehook = functools.partial(firing_pre_hook, T=args.T)
-    afterhook = functools.partial(firing_after_hook, T=args.T)
-    avghook = functools.partial(avg_after_hook, T=args.T)
-    avgtuplehook = functools.partial(avg_after_tuple_hook, T=args.T)
+    if args.spike:
+        hooks = []
+        layers = model_utils.get_layers(model)
+        prehook = functools.partial(firing_pre_hook, T=args.T)
+        afterhook = functools.partial(firing_after_hook, T=args.T)
+        avghook = functools.partial(avg_after_hook, T=args.T)
+        avgtuplehook = functools.partial(avg_after_tuple_hook, T=args.T)
 
-    # 2. spiking softmax, q, k
-    for layer in layers:
-        q_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer
-        k_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer
+        # 2. spiking softmax, q, k
+        for layer in layers:
+            q_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer
+            k_quantizer = layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer
+            
+            layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer = SpikeQuantizer.from_pretrained(q_quantizer, args.T)
+            layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer = SpikeQuantizer.from_pretrained(k_quantizer, args.T)
+            layer.self_attn.softmax = SpikeSoftmax('spike/exp.pth', 'spike/inv.pth', args.T)
         
-        layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer = SpikeQuantizer.from_pretrained(q_quantizer, args.T)
-        layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer = SpikeQuantizer.from_pretrained(k_quantizer, args.T)
-        layer.self_attn.softmax = SpikeSoftmax('spike/exp.pth', 'spike/inv.pth', args.T)
-    
-    # 3. spiking rmsnorm
-    acts = torch.load('rinv_input_acts.pth', weights_only=True)
-    maxs = np.array(list(map(lambda x: 1. / math.sqrt(x.min()), acts)))
-    mins = np.array(list(map(lambda x: 1. / math.sqrt(x.max()), acts)))
-    alphas = (maxs - mins) / args.rmsnorm_range
-    alpha_iter = iter(alphas)
-    for layer in layers:
-        alpha = next(alpha_iter)
-        layer.input_layernorm = SpikeRMSNorm(layer.input_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
-        alpha = next(alpha_iter)
-        layer.post_attention_layernorm = SpikeRMSNorm(layer.post_attention_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+        # 3. spiking rmsnorm
+        acts = torch.load('rinv_input_acts.pth', weights_only=True)
+        maxs = np.array(list(map(lambda x: 1. / math.sqrt(x.min()), acts)))
+        mins = np.array(list(map(lambda x: 1. / math.sqrt(x.max()), acts)))
+        alphas = (maxs - mins) / args.rmsnorm_range
+        alpha_iter = iter(alphas)
+        for layer in layers:
+            alpha = next(alpha_iter)
+            layer.input_layernorm = SpikeRMSNorm(layer.input_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+            alpha = next(alpha_iter)
+            layer.post_attention_layernorm = SpikeRMSNorm(layer.post_attention_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
 
-    # 4. spiking mlp
-    for layer in layers:
-        # layer.mlp = SpikeLlamaMLP(layer.mlp, 'spike/silu.pth', args.T)
-        layer.mlp.act_fn = NonLinearOp.from_pretrained('spike/silu_new.pth')
-        layer.mlp.down_proj.input_quantizer = SpikeQuantizer.from_pretrained(layer.mlp.down_proj.input_quantizer, args.T)
-        # layer.mlp.act_fn = FakeSiLU()
+        # 4. spiking mlp
+        for layer in layers:
+            # layer.mlp = SpikeLlamaMLP(layer.mlp, 'spike/silu.pth', args.T)
+            layer.mlp.act_fn = NonLinearOp.from_pretrained('spike/silu_new.pth', tag='silu')
+            layer.mlp.down_proj.input_quantizer = SpikeQuantizer.from_pretrained(layer.mlp.down_proj.input_quantizer, args.T)
+            # layer.mlp.act_fn = FakeSiLU()
 
-    for layer in layers:
+        for layer in layers:
 
-        hooks.append(layer.input_layernorm.register_forward_pre_hook(prehook))
-        hooks.append(layer.input_layernorm.register_forward_hook(avghook))
+            hooks.append(layer.input_layernorm.register_forward_pre_hook(prehook))
+            # hooks.append(layer.input_layernorm.register_forward_hook(avghook))
 
-        hooks.append(layer.input_layernorm.register_forward_hook(afterhook))
-        hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
+            # hooks.append(layer.input_layernorm.register_forward_hook(afterhook))
+            hooks.append(layer.self_attn.register_forward_hook(avgtuplehook))
 
-        hooks.append(layer.post_attention_layernorm.register_forward_pre_hook(prehook))
-        hooks.append(layer.post_attention_layernorm.register_forward_hook(avghook))
+            hooks.append(layer.post_attention_layernorm.register_forward_pre_hook(prehook))
+            # hooks.append(layer.post_attention_layernorm.register_forward_hook(avghook))
 
-        hooks.append(layer.mlp.register_forward_pre_hook(prehook))
-        hooks.append(layer.mlp.register_forward_hook(avghook))
+            # hooks.append(layer.mlp.register_forward_pre_hook(prehook))
+            hooks.append(layer.mlp.register_forward_hook(avghook))
+
+            # # if level-3, average should be placed on the whole layer, because residual is not reduced
+            # hooks.append(layer.register_forward_hook(avgtuplehook))
 
     model.half()    # to make sure same evaluation results with main
-    evaluate(model, tokenizer, prefixed_key_values,  args,logger)
+    evaluate(model, tokenizer, prefixed_key_values, args, logger)
 
     # import ipdb
     # ipdb.set_trace()

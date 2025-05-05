@@ -1,0 +1,211 @@
+Backward pass completed for LlamaDecoderLayer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for LlamaMLP:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeRMSNorm:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for LlamaSdpaAttention:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeSoftmax:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QKRotationWrapper:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeRMSNorm:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+layer 0 sample 0 loss: 9.298324584960938e-06
+Backward pass completed for LlamaDecoderLayer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for LlamaMLP:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeRMSNorm:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for LlamaSdpaAttention:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeSoftmax:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+neuron backward passed
+Backward pass completed for IFNeuron:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QKRotationWrapper:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for UniformAffineQuantizer:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for QuantLinear:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for SpikeRMSNorm:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for NonLinearOp:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Approximator:post_attention_layernorm.rsqrtop.approximator.fc2!
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!
+signed neuron bwd passed
+Backward pass completed for Linear:post_attention_layernorm.rsqrtop.approximator.fc2!

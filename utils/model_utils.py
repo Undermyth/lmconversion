@@ -10,8 +10,10 @@ import logging
 from transformers.cache_utils import DynamicCache
 import sys
 import pathlib
+import torch.nn.functional as F
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 from modeling_gpt_neox import GPTNeoXLayer, GPTNeoXForCausalLM
+from modeling_llama import LlamaForCausalLM, LlamaDecoderLayer, LlamaRMSNorm
 
 OPT_MODEL = transformers.models.opt.modeling_opt.OPTForCausalLM
 OPT_LAYER = transformers.models.opt.modeling_opt.OPTDecoderLayer
@@ -19,6 +21,9 @@ OPT_NORM = torch.nn.LayerNorm
 LLAMA_MODEL = transformers.models.llama.modeling_llama.LlamaForCausalLM
 LLAMA_LAYER = transformers.models.llama.modeling_llama.LlamaDecoderLayer
 LLAMA_NORM = transformers.models.llama.modeling_llama.LlamaRMSNorm
+CUSTOM_LLAMA_MODEL = LlamaForCausalLM
+CUSTOM_LLAMA_LAYER = LlamaDecoderLayer
+CUSTOM_LLAMA_NORM = LlamaRMSNorm
 MISTRAL_MODEL = transformers.models.mistral.modeling_mistral.MistralForCausalLM
 MISTRAL_LAYER = transformers.models.mistral.modeling_mistral.MistralDecoderLayer
 MISTRAL_NORM = transformers.models.mistral.modeling_mistral.MistralRMSNorm
@@ -37,6 +42,8 @@ INTERNLM2_NORM = None
 def model_type_extractor(model):
     if isinstance(model, LLAMA_MODEL):
         return LLAMA_MODEL
+    if isinstance(model, CUSTOM_LLAMA_MODEL):
+        return CUSTOM_LLAMA_MODEL
     elif isinstance(model, OPT_MODEL):
         return OPT_MODEL
     elif isinstance(model, MISTRAL_MODEL):
@@ -59,7 +66,7 @@ def skip(*args, **kwargs):
     pass
 
 def get_rope_function_name(model):
-    if isinstance(model, (LLAMA_MODEL, MISTRAL_MODEL, QWEN2_MODEL, PYTHIA_MODEL)):
+    if isinstance(model, (LLAMA_MODEL, CUSTOM_LLAMA_MODEL, MISTRAL_MODEL, QWEN2_MODEL, PYTHIA_MODEL)):
         return "apply_rotary_pos_emb"
     raise NotImplementedError
 
@@ -67,7 +74,7 @@ def get_rope_function_name(model):
 def get_layers(model):
     if isinstance(model, OPT_MODEL):
         return model.model.decoder.layers
-    if isinstance(model, LLAMA_MODEL):
+    if isinstance(model, LLAMA_MODEL) or isinstance(model, CUSTOM_LLAMA_MODEL):
         return model.model.layers
     if isinstance(model, MISTRAL_MODEL):
         return model.model.layers
@@ -118,6 +125,8 @@ def get_model(
 def get_model_type(model):
     if isinstance(model, LLAMA_MODEL):
         return LLAMA_MODEL
+    elif isinstance(model, CUSTOM_LLAMA_MODEL):
+        return CUSTOM_LLAMA_MODEL
     elif isinstance(model, OPT_MODEL):
         return OPT_MODEL
     elif isinstance(model, MISTRAL_MODEL):
@@ -132,6 +141,8 @@ def get_model_type(model):
 def get_norm_type(model):
     if isinstance(model, LLAMA_MODEL):
         return LLAMA_NORM
+    elif isinstance(model, CUSTOM_LLAMA_MODEL):
+        return CUSTOM_LLAMA_NORM
     elif isinstance(model, OPT_MODEL):
         return OPT_NORM
     elif isinstance(model, MISTRAL_MODEL):
@@ -149,7 +160,7 @@ def get_norm_type(model):
     
 # def get_embeddings(model, model_type) -> list[torch.nn.Module]:
 def get_embeddings(model, model_type):
-    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL:
+    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL or model_type == CUSTOM_LLAMA_MODEL:
         return [model.model.embed_tokens]
     elif model_type == INTERNLM2_MODEL:
         return [model.model.tok_embeddings]
@@ -162,7 +173,7 @@ def get_embeddings(model, model_type):
 
 
 def get_transformer_layers(model, model_type):
-    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL or model_type == INTERNLM2_MODEL:
+    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL or model_type == INTERNLM2_MODEL or model_type == CUSTOM_LLAMA_MODEL:
         return [layer for layer in model.model.layers]
     elif model_type == OPT_MODEL:
         return [layer for layer in model.model.decoder.layers]
@@ -174,7 +185,7 @@ def get_transformer_layers(model, model_type):
 
 
 def get_lm_head(model, model_type):
-    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL:
+    if model_type == LLAMA_MODEL or model_type == MISTRAL_MODEL or model_type == QWEN2_MODEL or model_type == CUSTOM_LLAMA_MODEL:
         return model.lm_head
     elif model_type == OPT_MODEL:
         return model.lm_head
@@ -186,7 +197,7 @@ def get_lm_head(model, model_type):
         raise ValueError(f'Unknown model type {model_type}')
 
 def get_pre_head_layernorm(model, model_type):
-    if model_type == LLAMA_MODEL:
+    if model_type == LLAMA_MODEL or model_type == CUSTOM_LLAMA_MODEL:
         pre_head_layernorm = model.model.norm
         assert isinstance(pre_head_layernorm,
                           LLAMA_NORM)
@@ -213,7 +224,7 @@ def get_pre_head_layernorm(model, model_type):
 
 def get_mlp_bottleneck_size(model):
     model_type = get_model_type(model)
-    if model_type == LLAMA_MODEL:
+    if model_type == LLAMA_MODEL or model_type == CUSTOM_LLAMA_MODEL:
         return model.config.intermediate_size
     elif model_type == OPT_MODEL:
         return model.config.ffn_dim
@@ -443,16 +454,23 @@ from tqdm import tqdm
 from einops import repeat
 
 class PrefixCache:
-    def __init__(self, key_value_cache, layer_index) -> None:
+    def __init__(self, key_value_cache, spike, layer_index) -> None:
         super().__init__()
         self.key_cache, self.value_cache = key_value_cache[layer_index]
-        self.spike = True
+        self.spike = spike
         self.T = 8
 
     def update(self, key_states, value_states, layer_idx, cache_kwargs = None):
         if self.spike:
-            key_cache = repeat(self.key_cache, '... -> T ...', T=self.T).flatten(0, 1)
-            value_cache = repeat(self.value_cache, '... -> T ...', T=self.T).flatten(0, 1)
+            if self.key_cache.shape[0] != key_states.shape[0]:
+                B = key_states.shape[0] // self.T
+                key_cache = repeat(self.key_cache, '... -> B ...', B=B).flatten(0, 1)
+                value_cache = repeat(self.value_cache, '... -> B ...', B=B).flatten(0, 1)
+                key_cache = repeat(key_cache, '... -> T ...', T=self.T).flatten(0, 1)
+                value_cache = repeat(value_cache, '... -> T ...', T=self.T).flatten(0, 1)
+            else:
+                key_cache = repeat(self.key_cache, '... -> T ...', T=self.T).flatten(0, 1)
+                value_cache = repeat(self.value_cache, '... -> T ...', T=self.T).flatten(0, 1)
             # print(key_cache.shape, key_states.shape)
             key_cache = torch.cat([key_cache, key_states], dim=-2)
             value_cache = torch.cat([value_cache, value_states], dim=-2)
@@ -462,7 +480,7 @@ class PrefixCache:
             value_cache = torch.cat([self.value_cache, value_states], dim=-2)
             return key_cache, value_cache
 
-def layerwise_inference(model, prefixed_key_values, dataset, mask, labels=None):
+def layerwise_inference(model, spike, prefixed_key_values, dataset, mask, labels=None):
     '''
     model should be on cpu.
     '''
@@ -489,7 +507,7 @@ def layerwise_inference(model, prefixed_key_values, dataset, mask, labels=None):
     model.model.embed_tokens.cuda()
     layers = get_layers(model)
     for i in range(len(layers)):
-        layers[i].self_attn.past_key_value = PrefixCache(prefixed_key_values, i)
+        layers[i].self_attn.past_key_value = PrefixCache(prefixed_key_values, spike=spike, layer_index=i)
     layers[0].cuda()
     layers[0] = Catcher(layers[0])
 
@@ -513,8 +531,6 @@ def layerwise_inference(model, prefixed_key_values, dataset, mask, labels=None):
             print(j, len(layer_dataset))
             data = layer_dataset[j].cuda()
             layer_dataset[j] = layer(data, attention_mask=mask, position_ids=position_ids)[0].cpu()
-            # print(layer_dataset[j])
-        # exit(0)
         layers[i].cpu()
         del layer
         gc.collect()
@@ -555,3 +571,115 @@ def layerwise_inference(model, prefixed_key_values, dataset, mask, labels=None):
         return layer_dataset, losses
 
     return layer_dataset, None
+
+def layerwise_calibrate(ref_model, model, prefixed_key_values, dataset, mask, labels=None):
+    '''
+    model should be on cpu.
+    '''
+    position_ids = None
+    layer_dataset = []
+
+    # catch data in the first layer
+    class Catcher(nn.Module):
+        def __init__(self, module):
+            super().__init__()
+            self.module = module
+            self.position_ids = None
+        def forward(
+            self, 
+            hidden_states: torch.Tensor, 
+            attention_mask: Optional[torch.Tensor] = None, 
+            position_ids: Optional[torch.LongTensor] = None,
+            *args, **kwargs
+        ):
+            layer_dataset.append(hidden_states.detach().cpu())
+            self.position_ids = position_ids
+            raise ValueError
+        
+    # preparation of reference model and its input data
+    ref_model.model.embed_tokens.cuda()
+    ref_layers = get_layers(ref_model)
+    for i in range(len(ref_layers)):
+        ref_layers[i].self_attn.past_key_value = PrefixCache(prefixed_key_values, spike=False, layer_index=i)
+    ref_layers[0].cuda()
+    ref_layers[0] = Catcher(ref_layers[0])
+    for sample in dataset:
+        try: 
+            ref_model(sample.cuda())
+        except ValueError:
+            pass
+
+    ref_position_ids = ref_layers[0].position_ids + prefixed_key_values[0][0].shape[-2]
+    ref_model.model.embed_tokens.cpu()
+    ref_layers[0].cpu()
+    torch.cuda.empty_cache()
+    ref_layers[0] = ref_layers[0].module
+    ref_layer_dataset = layer_dataset
+    layer_dataset = []
+    
+    # preparation of target model and its input data
+    model.model.embed_tokens.cuda()
+    layers = get_layers(model)
+    for i in range(len(layers)):
+        layers[i].self_attn.past_key_value = PrefixCache(prefixed_key_values, spike=True, layer_index=i)
+    layers[0].cuda()
+    layers[0] = Catcher(layers[0])
+
+    for sample in dataset:
+        try:
+            model(sample.cuda())
+        except ValueError:
+            pass        
+    position_ids = layers[0].position_ids + prefixed_key_values[0][0].shape[-2]
+
+    model.model.embed_tokens.cpu()
+    layers[0].cpu()
+    torch.cuda.empty_cache()
+    layers[0] = layers[0].module
+
+    # layerwise calibration
+    ref_layer_output = []
+    pbar = tqdm(range(len(layers)), desc='Calibrating Layers: ')
+    for i in pbar:
+
+        # produce the target from ref model
+        with torch.no_grad():
+            ref_layer = ref_layers[i].cuda()
+            for j in range(len(ref_layer_dataset)):
+                data = ref_layer_dataset[j].cuda()
+                ref_layer_output.append(ref_layer(data, attention_mask=mask, position_ids=ref_position_ids)[0].detach().cpu())
+            ref_layers[i].cpu()
+            del ref_layer
+            gc.collect()
+            torch.cuda.empty_cache()
+            print('ref layer done')
+
+        # optimize the target model
+        layer = layers[i].cuda()
+        params = []
+        params.extend(layer.input_layernorm.rsqrtop.approximator.parameters())
+        params.extend(layer.post_attention_layernorm.rsqrtop.approximator.parameters())
+        optimizer = torch.optim.SGD(params, lr=1e-5)
+        for j in range(len(layer_dataset)):
+            optimizer.zero_grad()
+            data = layer_dataset[j].cuda().detach()
+            pred = layer(data, attention_mask=mask, position_ids=position_ids)[0]
+            loss = F.huber_loss(pred, ref_layer_output[j].cuda().detach(), reduction='mean')
+            try:
+                loss.backward()
+            except:
+                pass
+            optimizer.step()
+            print(f'layer {i} sample {j} loss: {loss.item()}')
+
+        # forward again to get the corrected output as the input to the next layer
+        for j in range(len(layer_dataset)):
+            data = layer_dataset[j].cuda()
+            layer_dataset[j] = layer(data, attention_mask=mask, position_ids=position_ids)[0].cpu()
+        layers[i].cpu()
+        del layer
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        ref_layer_dataset = ref_layer_output
+        ref_layer_output = []

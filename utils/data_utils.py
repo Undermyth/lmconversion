@@ -8,7 +8,7 @@ import os
 import shutil
 import time
 
-from .model_utils import layerwise_inference
+from .model_utils import layerwise_inference, layerwise_calibrate
 
 
 def get_pile(tokenizer, train_size, val_size, seed, seqlen):
@@ -82,26 +82,12 @@ def get_wikitext2(tokenizer, train_size, val_size, seed, seqlen, test_only):
 
 def get_c4(tokenizer, train_size, val_size, seed, seqlen, test_only):
     print("get_c4")
-    try:
-        # set local path for faster loading
-        traindata = load_dataset("arrow",
-                    data_files={
-                        "train": "/cpfs01/user/chenmengzhao/huggingface/datasets/allenai___json/allenai--c4-6fbe877195f42de5/0.0.0/0f7e3662623656454fcd2b650f34e886a7db4b9104504885bd462096cc7a9f51/json-train-00000-of-00002.arrow",
-                        "validation": "/cpfs01/user/chenmengzhao/huggingface/datasets/allenai___json/allenai--c4-efc3d4f4606f44bd/0.0.0/fe5dd6ea2639a6df622901539cb550cf8797e5a6b2dd7af1cf934bed8e233e6e/json-validation.arrow",
-                    },split='train'
-                    )
-        valdata = load_dataset("arrow",
-                    data_files={
-                        "validation": "/cpfs01/user/chenmengzhao/huggingface/datasets/allenai___json/allenai--c4-efc3d4f4606f44bd/0.0.0/fe5dd6ea2639a6df622901539cb550cf8797e5a6b2dd7af1cf934bed8e233e6e/json-validation.arrow",
-                    },split='validation'
-                    )
-    except:
-        traindata = load_dataset(
-            'allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train'
-        )
-        valdata = load_dataset(
-            'allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation'
-        )
+    traindata = load_dataset(
+        'allenai/c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train'
+    )
+    valdata = load_dataset(
+        'allenai/c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation'
+    )
 
     random.seed(0)
     valenc = []
@@ -154,11 +140,7 @@ def get_c4(tokenizer, train_size, val_size, seed, seqlen, test_only):
 
 def get_redpajama(tokenizer, train_size, val_size, seed, seqlen):
     print("get_redpajama")
-    try:
-        loacal_dataset = "/cpfs01/user/chenmengzhao/huggingface/datasets/togethercomputer___red_pajama-data-1_t-sample"
-        traindata = load_dataset(loacal_dataset,split='train')   
-    except:
-        traindata = load_dataset("togethercomputer/RedPajama-Data-1T-Sample",split='train')   
+    traindata = load_dataset("togethercomputer/RedPajama-Data-1T-Sample",split='train')   
     random.seed(seed)
     traindata = traindata.shuffle(seed=seed) 
     trainloader = []
@@ -229,7 +211,7 @@ def test_ppl(args, model, tokenizer,prefixed_key_values=None, datasets=['wikitex
         nsamples = testenc.numel() // seqlen
         model.eval()
         nlls = []
-        nsamples = 64
+        # nsamples = 64
         pbar = tqdm(range(nsamples))
         for i in pbar:
             batch = testenc[:, (i * seqlen) : ((i + 1) * seqlen)]
@@ -269,7 +251,7 @@ def layerwise_test_ppl(args, model, tokenizer,prefixed_key_values=None, datasets
         model.eval()
         batches = []
         labels = []
-        # nsamples = 10
+        nsamples = 10
         for i in range(nsamples):
             batch = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]
             label = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]
@@ -284,13 +266,53 @@ def layerwise_test_ppl(args, model, tokenizer,prefixed_key_values=None, datasets
 
         model.cpu()
         torch.cuda.empty_cache()
-        batches, losses = layerwise_inference(model, prefixed_key_values, batches, mask, labels=labels)
+        batches, losses = layerwise_inference(model, args.spike, prefixed_key_values, batches, mask, labels=labels)
         print(losses)
         losses = torch.stack(losses)
         ppl = torch.exp(losses.sum() / (nsamples))
         print(len(losses), nsamples)
         results[dataset] = ppl.item()
         print(f'{dataset}:{ppl}')
+    return results
+
+def layerwise_calibration(args, ref_model, model, tokenizer,prefixed_key_values=None, datasets=['wikitext2']):
+    results = {}
+    for dataset in datasets:
+        testloader = get_loaders(
+            dataset,
+            tokenizer,
+            seed=0,
+            seqlen=args.ppl_seqlen,
+            test_only=True
+        )
+        if "c4" in dataset:
+            testenc = testloader
+        else:
+            testenc = testloader.input_ids
+
+        seqlen = args.ppl_seqlen
+        num_batch_tokens = seqlen * args.eval_batch_size
+        nsamples = testenc.numel() // (num_batch_tokens)
+        model.eval()
+        batches = []
+        labels = []
+        nsamples = 10
+        for i in range(nsamples):
+            batch = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]
+            label = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]
+            batches.append(batch.view(args.eval_batch_size, -1))
+            labels.append(label.view(args.eval_batch_size, -1))
+
+        mask = torch.triu(torch.ones(args.ppl_seqlen, args.ppl_seqlen), diagonal=1).cuda()
+        mask.masked_fill_(mask.bool(), float('-inf'))
+        prefix_mask = torch.zeros(args.ppl_seqlen, prefixed_key_values[0][0].shape[-2]).cuda()
+        mask = torch.cat([prefix_mask, mask], dim=-1)
+        mask = mask.unsqueeze(0).unsqueeze(0)
+
+        ref_model.cpu()
+        model.cpu()
+        torch.cuda.empty_cache()
+        batches, losses = layerwise_calibrate(ref_model, model, prefixed_key_values, batches, mask, labels=labels)
     return results
 
 class BlockTrainDataset(Dataset):
