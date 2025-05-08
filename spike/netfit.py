@@ -28,9 +28,9 @@ class Approximator(nn.Module):
             x = self.fc1(x)
             x = rearrange(x, '(T B) ... -> T B ...', T=T)
             output = multistep_neuron_update_triton(x, self.clip.threshold)
-            fr_count = output.sum(dim=0) / self.clip.threshold
-            fr = reduce(fr_count, '... d -> d', 'mean') / T
-            print(fr.mean().item())
+            # fr_count = output.sum(dim=0) / self.clip.threshold
+            # fr = reduce(fr_count, '... d -> d', 'mean') / T
+            # print(fr.mean().item())
             output = rearrange(output, 'T B ... -> (T B) ...')
             x = self.fc2(output)
         else:
@@ -102,7 +102,7 @@ class NonLinearOp(nn.Module):
         torch.save(checkpoint, weight_path)
     
     def forward(self, x):
-        print(f'[debug] {self.tag}', end=' ')
+        # print(f'[debug] {self.tag}', end=' ')
         x = x.unsqueeze(-1)
         if self.spike:
             self.approximator.spike_on()

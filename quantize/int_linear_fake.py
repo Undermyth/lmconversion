@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from quantize.quantizer import UniformAffineQuantizer
 import utils.hadamard_utils as hadamard_utils
-
+from einops import repeat
 
 
 
@@ -36,7 +36,7 @@ class QuantLinear(nn.Module):
         self.online_full_had=False
         self.use_temporary_parameter=False
 
-    
+        self.debug = False 
     
     def forward(self, input: torch.Tensor):
         input_dtype = input.dtype
@@ -61,10 +61,20 @@ class QuantLinear(nn.Module):
         if self.use_act_quant and self.input_bits < 16:
             input = self.input_quantizer(input)
 
+        # if self.debug:
+        #     input = repeat(input.mean(0), '... -> t ...', t=input.shape[0])
+        #     print('[internal] ', input.shape)
+
         out = self.fwd_func(input, weight, bias, **self.fwd_kwargs)
+
+        # if self.debug:
+        #     print('[internal2] ', out.mean(0)[1, 5].item())
 
         if self.use_act_quant and self.output_bits < 16:
             out = self.output_quantizer(out)
+
+        # if self.debug:
+        #     print('[internal3] ', out.mean(0)[1, 5].item())
 
         return out
 

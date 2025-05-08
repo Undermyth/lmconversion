@@ -6,7 +6,7 @@ from utils import model_utils
 from utils.model_utils import RMSN,get_kv_cache
 import utils.rotation_utils as rotation_utils
 from utils.rotation_utils import QKRotationWrapper
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
+from modeling_llama import LlamaRMSNorm
 import torch
 from torch import nn
 from typing  import Optional

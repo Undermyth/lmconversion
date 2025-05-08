@@ -239,7 +239,9 @@ class LlamaMLP(nn.Module):
             ]
             down_proj = sum(down_proj)
         else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            gate_proj = self.act_fn(self.gate_proj(x))
+            up_proj = self.up_proj(x)
+            down_proj = self.down_proj(gate_proj * up_proj)
 
         return down_proj
 
@@ -642,6 +644,8 @@ class LlamaSdpaAttention(LlamaAttention):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        # print(value_states.mean(0).transpose(0, 1).contiguous().view(q_len, self.num_key_value_heads * self.head_dim)[1, 5].item())
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

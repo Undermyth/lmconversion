@@ -32,7 +32,7 @@ def evaluate(model, tokenizer,prefixed_key_values, args, logger):
     prefixed_key_values = model_utils.mv_kv_cache(prefixed_key_values, model)
     results_str=""
     if args.eval_ppl:
-        datasets = ["wikitext2", "c4"]
+        datasets = ["wikitext2"]
         # datasets = ["redpajama"]
         # ppl_results = test_ppl(args, model, tokenizer, prefixed_key_values, datasets)
         ppl_results = layerwise_test_ppl(args, model, tokenizer, prefixed_key_values, datasets)

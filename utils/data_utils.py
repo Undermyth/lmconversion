@@ -251,7 +251,7 @@ def layerwise_test_ppl(args, model, tokenizer,prefixed_key_values=None, datasets
         model.eval()
         batches = []
         labels = []
-        nsamples = 10
+        # nsamples = 1
         for i in range(nsamples):
             batch = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]
             label = testenc[:, (i * num_batch_tokens) : ((i + 1) * num_batch_tokens)]

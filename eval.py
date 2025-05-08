@@ -71,7 +71,7 @@ def main():
     config = AutoConfig.from_pretrained(args.quant_model_path,trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained(args.quant_model_path, use_fast=True,legacy=False,trust_remote_code=True)
     with init_empty_weights():
-        if args.eval_tasks and args.spike:
+        if (args.eval_tasks or args.eval_ppl) and args.spike:
             model = LlamaForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
             print(model)
             layers = model_utils.get_layers(model)
@@ -79,6 +79,7 @@ def main():
                 layers[i].self_attn.past_key_value = model_utils.PrefixCache(prefixed_key_values, spike=args.spike, layer_index=i)
         else:
             model = AutoModelForCausalLM.from_pretrained(args.quant_model_path, config=config, device_map='cpu',torch_dtype=torch.float16,trust_remote_code=True)
+            print(model)
     wrap_to_quant_model(model)
     # register on-line hadadamrd transformation
     if quant_config.down_online_had:
@@ -144,6 +145,11 @@ def main():
             
             layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.q_quantizer = SpikeQuantizer.from_pretrained(q_quantizer, args.T)
             layer.self_attn.apply_rotary_pos_emb_qk_rotation_wrapper.k_quantizer = SpikeQuantizer.from_pretrained(k_quantizer, args.T)
+            layer.self_attn.v_proj.output_quantizer = SpikeQuantizer.from_pretrained(layer.self_attn.v_proj.output_quantizer, args.T)
+            layer.self_attn.v_proj.debug = True
+            layer.self_attn.o_proj.input_quantizer = SpikeQuantizer.from_pretrained(layer.self_attn.o_proj.input_quantizer, args.T)
+            layer.input_layernorm.output_quantizer = SpikeQuantizer.from_pretrained(layer.input_layernorm.output_quantizer, args.T)
+            layer.post_attention_layernorm.output_quantizer = SpikeQuantizer.from_pretrained(layer.post_attention_layernorm.output_quantizer, args.T)
             layer.self_attn.softmax = SpikeSoftmax('spike/exp.pth', 'spike/inv.pth', args.T)
         
         # 3. spiking rmsnorm
@@ -154,9 +160,9 @@ def main():
         alpha_iter = iter(alphas)
         for layer in layers:
             alpha = next(alpha_iter)
-            layer.input_layernorm = SpikeRMSNorm(layer.input_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+            layer.input_layernorm = SpikeRMSNorm(layer.input_layernorm.output_quantizer, layer.input_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
             alpha = next(alpha_iter)
-            layer.post_attention_layernorm = SpikeRMSNorm(layer.post_attention_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
+            layer.post_attention_layernorm = SpikeRMSNorm(layer.post_attention_layernorm.output_quantizer, layer.post_attention_layernorm.variance_epsilon, alpha, 'spike/rinv.pth', args.T)
 
         # 4. spiking mlp
         for layer in layers:

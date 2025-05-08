@@ -42,12 +42,16 @@ class IFNeuron(nn.Module):
         if self.spike_mode:
             if self.t == 0:
                 self.mem = torch.zeros_like(x).to(x.device)
+                self.spike_count = torch.zeros_like(x)
                 self.threshold = self.threshold.to(x.device)
                 self.mem += self.threshold / 2
             self.t += 1
             self.mem = self.mem + x
             # spike = (self.mem >= self.threshold).float()
             spike = surrogate(self.mem - self.threshold)
+            neg_spike = ((self.mem <= -self.threshold) & (self.spike_count > 0)).float()
+            spike -= neg_spike
+            self.spike_count += spike
             self.mem = self.mem - spike * self.threshold
             return spike
             # return clip_floor(F.relu(x), 16, self.threshold)
@@ -56,6 +60,21 @@ class IFNeuron(nn.Module):
         
     def reset(self):
         self.t = 0
+
+    def multistep_forward(self, x, T):
+        self.reset()
+        out = torch.zeros_like(x)
+        for i in range(T):
+            out[i] = self(x[i])
+        # rep = (self.mem // self.threshold) * (self.mem > 0).float() + (self.mem // self.threshold) * ((self.mem < 0) & (self.spike_count > 0)).float()
+        # rep = self.mem // self.threshold
+        # print(rep.flatten()[:30])
+        del self.mem
+        if hasattr(self, 'spike_count'):
+            del self.spike_count
+        torch.cuda.empty_cache()
+        return out
+
 
 class CIFNeuron(nn.Module):
 

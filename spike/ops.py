@@ -11,7 +11,7 @@ import sys
 import pathlib
 sys.path.append(str(pathlib.Path(__file__).parent))
 from netfit import NonLinearOp
-from neurons import CIFNeuron, IFNeuron, BurstNeuron
+from neurons import CIFNeuron, IFNeuron, BurstNeuron, multistep_neuron_update_triton
 
 torch.set_printoptions(precision=6)
 
@@ -81,17 +81,18 @@ class SpikeQuantizer(nn.Module):
         instance.if_neuron.threshold = quantizer.scale * quantizer.qmax
         instance.if_neuron.threshold.unsqueeze_(-1) # [c, 1, 1]
         instance.group_size = quantizer.group_size
+        instance.spike_mode = True
+        # print(f'[dev] {instance.if_neuron.threshold.shape}')
         return instance
     
     def forward(self, x):
         x = rearrange(x, '(T B) L (c g) -> T B L c g', T=self.T, g=self.group_size)
         x = x.unsqueeze(-1)
         x = self.fc1(x)
-        out = torch.zeros_like(x)
-        self.if_neuron.reset()
-        # self.if_neuron.init_max_spike(self.T)
-        for i in range(self.T):
-            out[i] = self.if_neuron(x[i])
+        out = self.if_neuron.multistep_forward(x, self.T)
+        # print((self.if_neuron.mem // self.if_neuron.threshold).flatten()[:20])
+        # out = multistep_neuron_update_triton(x.transpose(-3, -1).contiguous(), self.if_neuron.threshold.flatten()).transpose(-3, -1).contiguous()
+        # print(f'[dev] {x.shape}')
         out = self.fc2(out)
         out = out * self.if_neuron.threshold.to(out)
         out = out.squeeze(-1)
@@ -120,13 +121,13 @@ def spike_matmul(X: torch.Tensor, Y: torch.Tensor, T: int):
     
     # Compute phi terms
     term1 = torch.einsum('t...ij,t...jk->t...ik', X_cumsum, Ys)
-    # term2 = torch.einsum('t...ij,t...jk->t...ik', Xs, Y_cumsum)
-    # Phi = torch.cumsum(term1 + term2, dim=0).float()
-    Phi = term1.float()
+    term2 = torch.einsum('t...ij,t...jk->t...ik', Xs, Y_cumsum)
+    Phi = torch.cumsum(term1 + term2, dim=0).float()
+    # Phi = term1.float()
     
     # Compute t_psi_t terms
     times = torch.arange(1, T+1, device=X.device).view(T, *([1]*(Phi.dim()-1)))
-    times = (times + 1) / 2
+    # times = (times + 1) / 2
     t_psi_t = Phi / times
     
     # Compute corrections - this part cannot be fully parallelized
@@ -220,11 +221,12 @@ class SpikeSoftmax(nn.Module):
         return spike_elementwise_dot(exps, invs, self.T)
 
 class SpikeRMSNorm(nn.Module):
-    def __init__(self, variance_epsilon: float, alpha: float, rsqrt_weight_path: str, T: int):
+    def __init__(self, quantizer, variance_epsilon: float, alpha: float, rsqrt_weight_path: str, T: int):
         super().__init__()
         self.variance_epilon = variance_epsilon * alpha**2
         self.alpha = alpha
         self.rsqrtop = NonLinearOp.from_pretrained(rsqrt_weight_path, tag='rinv')
+        self.output_quantizer = quantizer
         self.T = T
     
     def forward(self, x):
@@ -233,7 +235,9 @@ class SpikeRMSNorm(nn.Module):
         x2 = x2.mean(dim=-1)
         x2_rsqrt = self.rsqrtop(x2 + self.variance_epilon)
         x2_rsqrt = x2_rsqrt.unsqueeze(-1).broadcast_to(x.shape)
-        return spike_elementwise_dot(x, x2_rsqrt, self.T)
+        res = spike_elementwise_dot(x, x2_rsqrt, self.T)
+        res = self.output_quantizer(res)
+        return res
 
 class SpikeLlamaMLP(nn.Module):
     def __init__(self, mlp: nn.Module, silu_weight_path: str, T: int):
